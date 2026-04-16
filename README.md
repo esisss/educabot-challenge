@@ -1,4 +1,6 @@
 # Challenge Técnico Node.js - Educabot
+
+# Challenge Técnico Node.js - Educabot
 ¡Bienvenido a este coding challenge de Node! Recomendamos leer este archivo completo antes de empezar.
 
 ## Condiciones
@@ -30,3 +32,34 @@ estructura del proyecto mediante los siguientes objetivos.
 
 
 
+
+## Resumen de cambios
+
+### Separación de responsabilidades
+
+La lógica de negocio que vivía en `src/handlers/metrics.ts` se extrajo a una capa de servicio (`src/services/metricsService.ts`). El handler quedó limitado a extraer parámetros del request, delegar al servicio y devolver la respuesta HTTP. Las funciones de cálculo (`getMeanUnitsSold`, `getCheapestBook`, `getBooksWrittenByAuthor`) ahora son internas al servicio.
+
+El flujo de dependencias quedó: `handler → service → provider`, compuesto en `index.ts`. Además, se estandarizó el manejo de errores en el handler con un try/catch que captura fallos del servicio y responde con status 500 y un body tipado (`ErrorResponse`).
+
+### Implementación del BooksProvider real
+
+Se creó `src/repositories/booksProvider.ts`, un provider que consume la API externa usando axios y mantiene el contrato existente (`getBooks(): Promise<Book[]>`). El manejo de errores distingue entre fallas de red y respuestas HTTP no exitosas, devolviendo mensajes descriptivos en cada caso. El mock original se conserva en `src/repositories/mocks/` como referencia.
+
+### Mejora del tipado
+
+Se eliminaron todos los usos de `any` (en los return types de las funciones de cálculo y en `Response<any>` del handler). Se definieron los tipos `MetricsResponse` y `ErrorResponse` en `src/models/metrics.ts` como contratos del endpoint. Se corrigió `Book.id` de `string` a `number` para alinearlo con los datos reales de la API.
+
+### Ajustes en los tests
+
+Los tests del handler se adaptaron para mockear el servicio en lugar del provider, reflejando la nueva estructura. Se agregaron tests del servicio (`src/services/metricsService.test.ts`) cubriendo: happy path con y sin filtro de autor, lista vacía, búsqueda case-insensitive y propagación de errores del provider. Se agregaron tests del provider HTTP (`src/repositories/booksProvider.test.ts`) cubriendo respuesta exitosa, error de red y status HTTP inesperado. Se agregó un test de error path en el handler para validar la respuesta 500.
+
+### Decisiones de alcance
+
+Prioricé una solución simple dentro del límite de tiempo. Evité agregar capas, abstracciones o patrones que no fueran estrictamente necesarios. La estructura se mantuvo lo más cercana posible al proyecto original, extendiendo solo donde el challenge lo requería (capa de servicio, provider real, tipos).
+
+## Uso de IA
+
+Se utilizó IA como herramienta de apoyo para análisis, validación de decisiones y estructuración del enfoque.
+
+El detalle de la sesión se encuentra en:
+`sesion_opencode.md`

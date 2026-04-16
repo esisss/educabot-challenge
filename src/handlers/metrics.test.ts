@@ -1,69 +1,80 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import metricsHandler from './metrics'
 import { Request, Response } from 'express'
-import { BooksProvider } from '../providers/books'
-import { Book } from '../models/book'
+import { ErrorResponse, MetricsResponse } from '../models/metrics'
+import { MetricsService } from '../services/metricsService'
 
 describe('metricsHandler', () => {
-  // Mock data
-  const mockBooks: Book[] = [
-    { id: 1, name: 'Book 1', author: 'Author 1', unitsSold: 100, price: 20 },
-    { id: 2, name: 'Book 2', author: 'Author 2', unitsSold: 200, price: 15 },
-    { id: 3, name: 'Book 3', author: 'Author 1', unitsSold: 300, price: 25 }
-  ]
-
-  // Mock BooksProvider
-  const mockBooksProvider: BooksProvider = {
-    getBooks: vi.fn().mockReturnValue(mockBooks)
+  const mockMetrics: MetricsResponse = {
+    mean_units_sold: 200,
+    cheapest_book: { id: 2, name: 'Book 2', author: 'Author 2', units_sold: 200, price: 15 },
+    books_written_by_author: [],
   }
 
-  // Set up handler with mock provider
-  const handler = metricsHandler(mockBooksProvider)
+  const mockMetricsService: MetricsService = {
+    getMetrics: vi.fn().mockResolvedValue(mockMetrics),
+  }
 
-  // Mock request and response
-  let mockReq: Partial<Request>
-  let mockRes: Partial<Response>
-  let jsonMock: any
+  const handler = metricsHandler(mockMetricsService)
+
+  let mockReq: Request<{}, {}, {}, { author?: string }>
+  let mockRes: Response<MetricsResponse | ErrorResponse>
+  let jsonMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     jsonMock = vi.fn()
     mockRes = {
       status: vi.fn().mockReturnThis(),
-      json: jsonMock
-    }
+      json: jsonMock,
+    } as unknown as Response<MetricsResponse | ErrorResponse>
+
     mockReq = {
-      query: {}
-    }
+      query: {},
+    } as Request<{}, {}, {}, { author?: string }>
+
+    vi.clearAllMocks()
+    vi.mocked(mockMetricsService.getMetrics).mockResolvedValue(mockMetrics)
   })
 
   describe('get', () => {
     it('should return metrics with empty author query', async () => {
-      await handler.get(mockReq as any, mockRes as any)
+      await handler.get(mockReq, mockRes)
 
-      expect(mockBooksProvider.getBooks).toHaveBeenCalled()
+      expect(mockMetricsService.getMetrics).toHaveBeenCalledWith(undefined)
       expect(mockRes.status).toHaveBeenCalledWith(200)
-      expect(jsonMock).toHaveBeenCalledWith({
-        mean_units_sold: 200,
-        cheapest_book: mockBooks[1],
-        books_written_by_author: []
-      })
+      expect(jsonMock).toHaveBeenCalledWith(mockMetrics)
     })
 
     it('should return metrics with author query', async () => {
       mockReq.query = { author: 'Author 1' }
 
-      await handler.get(mockReq as any, mockRes as any)
-
-      expect(mockBooksProvider.getBooks).toHaveBeenCalled()
-      expect(mockRes.status).toHaveBeenCalledWith(200)
-      expect(jsonMock).toHaveBeenCalledWith({
-        mean_units_sold: 200,
-        cheapest_book: mockBooks[1],
+      const metricsByAuthor: MetricsResponse = {
+        ...mockMetrics,
         books_written_by_author: [
-          mockBooks[0],
-          mockBooks[2]
-        ]
-      })
+          { id: 1, name: 'Book 1', author: 'Author 1', units_sold: 100, price: 20 },
+          { id: 3, name: 'Book 3', author: 'Author 1', units_sold: 300, price: 25 },
+        ],
+      }
+      vi.mocked(mockMetricsService.getMetrics).mockResolvedValue(metricsByAuthor)
+
+      await handler.get(mockReq, mockRes)
+
+      expect(mockMetricsService.getMetrics).toHaveBeenCalledWith('Author 1')
+      expect(mockRes.status).toHaveBeenCalledWith(200)
+      expect(jsonMock).toHaveBeenCalledWith(metricsByAuthor)
+    })
+
+    it('should return 500 when service throws', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      vi.mocked(mockMetricsService.getMetrics).mockRejectedValue(new Error('Provider failed'))
+
+      await handler.get(mockReq, mockRes)
+
+      expect(mockRes.status).toHaveBeenCalledWith(500)
+      expect(jsonMock).toHaveBeenCalledWith({ error: 'Provider failed' })
+      expect(consoleErrorSpy).toHaveBeenCalled()
+
+      consoleErrorSpy.mockRestore()
     })
   })
 })
