@@ -1,6 +1,4 @@
 # Challenge Técnico Node.js - Educabot
-
-# Challenge Técnico Node.js - Educabot
 ¡Bienvenido a este coding challenge de Node! Recomendamos leer este archivo completo antes de empezar.
 
 ## Condiciones
